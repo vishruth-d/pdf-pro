@@ -56,7 +56,7 @@ h2{font-size:24px;font-weight:600;margin-bottom:6px}
 @media(max-width:768px){
 .convert-grid{grid-template-columns:1fr}
 body{flex-direction:column-reverse}
-nav{width:100%;flex-direction:row;padding:0 0 env(safe-area-inset-bottom,0);border-right:none;border-top:1px solid var(--border);overflow-x:auto;flex-shrink:0}
+nav{width:100%;flex-direction:row;padding:0 0 calc(env(safe-area-inset-bottom,0px) + 16px);border-right:none;border-top:1px solid var(--border);overflow-x:auto;flex-shrink:0}
 .logo{display:none}
 .nav-item{padding:10px 14px;border-left:none;border-top:3px solid transparent;flex-direction:column;font-size:11px;gap:4px;white-space:nowrap;flex-shrink:0}
 .nav-item.active{border-left-color:transparent;border-top-color:var(--accent)}
@@ -86,7 +86,16 @@ h2{font-size:20px}
 .text-overlay{position:absolute;top:0;left:0;overflow:hidden}
 .text-item{position:absolute;background:transparent;border:1px solid transparent;cursor:text;white-space:pre;padding:1px 2px;margin:-1px -2px;line-height:1.15;letter-spacing:0}
 .text-item:hover{border-color:rgba(99,102,241,.4);background:rgba(99,102,241,.03)}
-.text-item:focus{outline:none;border-color:var(--accent);background:rgba(255,255,255,.92);color:#000!important;box-shadow:0 0 0 2px rgba(99,102,241,.3)}
+.text-item:focus{outline:none;border-color:var(--accent);background:rgba(255,255,255,.95);box-shadow:0 0 0 2px rgba(99,102,241,.3)}
+.text-item.edited{background:rgba(255,255,255,.95);border-color:rgba(34,197,94,.4)}
+.text-item.dragging-item{opacity:.7;z-index:10}
+.edit-toolbar{display:flex;gap:6px;align-items:center;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;flex-wrap:wrap;margin-bottom:8px}
+.edit-toolbar .tb{padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-size:13px;display:flex;align-items:center;gap:4px;transition:all .15s}
+.edit-toolbar .tb:hover{border-color:var(--accent)}
+.edit-toolbar .tb.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.edit-toolbar .sep{width:1px;height:20px;background:var(--border);margin:0 4px}
+.edit-toolbar input[type=color]{width:28px;height:28px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);cursor:pointer;padding:2px}
+.edit-toolbar select{padding:5px 8px;font-size:12px}
 .page-nav{display:flex;align-items:center;gap:12px;margin:12px 0}
 .page-nav span{font-size:14px;color:var(--text2)}
 .summariser-area{display:flex;flex-direction:column;gap:16px}
@@ -260,6 +269,22 @@ Extract Selected
 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
 Save PDF
 </button>
+</div>
+<div class="edit-toolbar" id="edit-toolbar">
+<button class="tb" onclick="editCmd('bold')" title="Bold"><b>B</b></button>
+<button class="tb" onclick="editCmd('italic')" title="Italic"><i>I</i></button>
+<button class="tb" onclick="editCmd('underline')" title="Underline"><u>U</u></button>
+<div class="sep"></div>
+<label style="font-size:12px;color:var(--text2)">Colour:</label>
+<input type="color" id="edit-color" value="#000000" onchange="editApplyColor()">
+<div class="sep"></div>
+<label style="font-size:12px;color:var(--text2)">Size:</label>
+<select id="edit-fontsize" onchange="editApplySize()">
+<option value="">-</option>
+<option>8</option><option>9</option><option>10</option><option>11</option><option>12</option><option>14</option><option>16</option><option>18</option><option>20</option><option>24</option><option>28</option><option>32</option><option>36</option><option>48</option>
+</select>
+<div class="sep"></div>
+<span style="font-size:11px;color:var(--text2)">Hold Shift+drag to move text</span>
 </div>
 <div class="editor-canvas-wrap" id="edit-wrap">
 <div class="edit-page-box" id="edit-page-box">
@@ -538,11 +563,34 @@ function mapFont(pdfFont){
 }
 function fontWeight(pdfFont){return pdfFont&&/bold/i.test(pdfFont)?'bold':'normal'}
 function fontStyle(pdfFont){return pdfFont&&/italic|oblique/i.test(pdfFont)?'italic':'normal'}
-let editZoom=100;
+let editZoom=100,editMeta={};// editMeta[page][idx]={color,bold,italic,underline,fontSize,dx,dy}
+
+function editCmd(cmd){document.execCommand(cmd)}
+function editApplyColor(){
+  const c=document.getElementById('edit-color').value;
+  const sel=window.getSelection();
+  const span=sel?.anchorNode?.parentElement?.closest?.('.text-item')||document.activeElement;
+  if(span&&span.classList.contains('text-item')){
+    span.style.color=c;
+    const pg=editPage,idx=+span.dataset.idx;
+    if(!editMeta[pg])editMeta[pg]={};if(!editMeta[pg][idx])editMeta[pg][idx]={};
+    editMeta[pg][idx].color=c;
+  }
+}
+function editApplySize(){
+  const v=document.getElementById('edit-fontsize').value;if(!v)return;
+  const span=document.activeElement;
+  if(span&&span.classList.contains('text-item')){
+    const pg=editPage,idx=+span.dataset.idx;
+    span.style.fontSize=v+'px';
+    if(!editMeta[pg])editMeta[pg]={};if(!editMeta[pg][idx])editMeta[pg][idx]={};
+    editMeta[pg][idx].fontSize=+v;
+  }
+}
 
 setupDrop('edit-drop','edit-input',async files=>{
   const f=files[0];if(!f)return;
-  editPdfBytes=await readFile(f);editPage=1;editTexts={};editZoom=100;
+  editPdfBytes=await readFile(f);editPage=1;editTexts={};editMeta={};editZoom=100;
   document.getElementById('edit-zoom').value=100;
   document.getElementById('edit-zoom-val').textContent='100%';
   const pdf=await pdfjsLib.getDocument({data:editPdfBytes.slice()}).promise;
@@ -598,45 +646,83 @@ async function renderEditPage(){
   // Extract and position text items
   const tc=await page.getTextContent();
   const saved=editTexts[editPage]||{};
+  const meta=editMeta[editPage]||{};
   tc.items.forEach((item,idx)=>{
     if(!item.str||!item.str.trim())return;
-    // Transform item position into viewport (screen) coordinates
     const tx=pdfjsLib.Util.transform(vp.transform,item.transform);
-    // tx = [a, b, c, d, e, f] as a 2D matrix
-    // e=tx[4] is X in screen px, f=tx[5] is Y baseline in screen px (top-down)
-    const fontHeight=Math.hypot(tx[2],tx[3]);// vertical component = rendered font size
-    if(fontHeight<2)return;// skip invisible items
+    const fontHeight=Math.hypot(tx[2],tx[3]);
+    if(fontHeight<2)return;
+    const m=meta[idx]||{};
+    // Determine the item's original colour
+    const origColor=item.color?`rgb(${Math.round(item.color[0]*255)},${Math.round(item.color[1]*255)},${Math.round(item.color[2]*255)})`:'#000';
+    const displayColor=m.color||origColor;
     const span=document.createElement('div');
     span.className='text-item';
     span.contentEditable='plaintext-only';
     span.spellcheck=false;
+    span.dataset.idx=idx;
     span.textContent=saved[idx]!==undefined?saved[idx]:item.str;
-    // Position: tx[5] is the baseline Y from top. Offset up by fontHeight for top of text
-    span.style.left=Math.round(tx[4])+'px';
-    span.style.top=Math.round(tx[5]-fontHeight)+'px';
-    span.style.fontSize=Math.round(fontHeight*10)/10+'px';
+    // Position with any drag offset
+    const baseX=Math.round(tx[4])+(m.dx||0);
+    const baseY=Math.round(tx[5]-fontHeight)+(m.dy||0);
+    span.style.left=baseX+'px';
+    span.style.top=baseY+'px';
+    span.style.fontSize=(m.fontSize||(Math.round(fontHeight*10)/10))+'px';
     span.style.fontFamily=mapFont(item.fontName);
-    span.style.fontWeight=fontWeight(item.fontName);
-    span.style.fontStyle=fontStyle(item.fontName);
-    // Approximate width to help alignment
-    if(item.width){
-      const scaledW=item.width*scale;
-      span.style.minWidth=Math.round(scaledW)+'px';
-    }
-    const isEdited=saved[idx]!==undefined&&saved[idx]!==item.str;
-    if(isEdited){span.style.color='#000';span.style.background='rgba(255,255,255,.95)';span.style.borderColor='rgba(34,197,94,.4)'}
+    span.style.fontWeight=m.bold?'bold':fontWeight(item.fontName);
+    span.style.fontStyle=m.italic?'italic':fontStyle(item.fontName);
+    if(m.underline)span.style.textDecoration='underline';
+    if(item.width){span.style.minWidth=Math.round(item.width*scale)+'px'}
+    // Show edited items, hide unedited
+    const isEdited=saved[idx]!==undefined&&saved[idx]!==item.str||m.color||m.dx||m.dy||m.fontSize;
+    if(isEdited){span.style.color=displayColor;span.classList.add('edited')}
     else{span.style.color='transparent'}
-    span.addEventListener('focus',()=>{span.style.color='#000';span.style.background='rgba(255,255,255,.95)'});
+    span.addEventListener('focus',()=>{span.style.color=displayColor;span.style.background='rgba(255,255,255,.95)'});
     span.addEventListener('blur',()=>{
       if(!editTexts[editPage])editTexts[editPage]={};
       editTexts[editPage][idx]=span.textContent;
-      const changed=span.textContent!==item.str;
-      if(changed){span.style.color='#000';span.style.background='rgba(255,255,255,.95)';span.style.borderColor='rgba(34,197,94,.4)'}
-      else{span.style.color='transparent';span.style.background='transparent';span.style.borderColor='transparent'}
+      // Check bold/italic/underline state
+      const cs=window.getComputedStyle(span);
+      if(!editMeta[editPage])editMeta[editPage]={};
+      if(!editMeta[editPage][idx])editMeta[editPage][idx]={};
+      const em=editMeta[editPage][idx];
+      if(cs.fontWeight>=600)em.bold=true;
+      if(cs.fontStyle==='italic')em.italic=true;
+      if(cs.textDecoration.includes('underline'))em.underline=true;
+      const curColor=span.style.color||displayColor;
+      const changed=span.textContent!==item.str||em.color||em.dx||em.dy||em.fontSize;
+      if(changed){span.style.color=curColor;span.classList.add('edited');span.style.background='rgba(255,255,255,.95)'}
+      else{span.style.color='transparent';span.classList.remove('edited');span.style.background='transparent'}
     });
     span.addEventListener('input',()=>{
       if(!editTexts[editPage])editTexts[editPage]={};
       editTexts[editPage][idx]=span.textContent;
+    });
+    // Shift+drag to move text box
+    let dragStartX,dragStartY,startL,startT,isDragging=false;
+    span.addEventListener('mousedown',e=>{
+      if(!e.shiftKey)return;
+      e.preventDefault();isDragging=true;span.classList.add('dragging-item');
+      dragStartX=e.clientX;dragStartY=e.clientY;
+      startL=parseInt(span.style.left);startT=parseInt(span.style.top);
+      const onMove=ev=>{
+        span.style.left=(startL+ev.clientX-dragStartX)+'px';
+        span.style.top=(startT+ev.clientY-dragStartY)+'px';
+      };
+      const onUp=ev=>{
+        isDragging=false;span.classList.remove('dragging-item');
+        document.removeEventListener('mousemove',onMove);
+        document.removeEventListener('mouseup',onUp);
+        const dx=(parseInt(span.style.left)-baseX)+(m.dx||0);
+        const dy=(parseInt(span.style.top)-baseY)+(m.dy||0);
+        if(!editMeta[editPage])editMeta[editPage]={};
+        if(!editMeta[editPage][idx])editMeta[editPage][idx]={};
+        editMeta[editPage][idx].dx=(m.dx||0)+(parseInt(span.style.left)-(baseX));
+        editMeta[editPage][idx].dy=(m.dy||0)+(parseInt(span.style.top)-(baseY));
+        span.style.color=displayColor;span.classList.add('edited');span.style.background='rgba(255,255,255,.95)';
+      };
+      document.addEventListener('mousemove',onMove);
+      document.addEventListener('mouseup',onUp);
     });
     overlay.appendChild(span);
   });
@@ -647,8 +733,9 @@ async function saveEditedPdf(){
   if(!editPdfBytes)return;
   try{
     const doc=await PDFDocument.load(editPdfBytes,{ignoreEncryption:true});
-    const hasEdits=Object.values(editTexts).some(e=>Object.keys(e).length>0);
-    if(!hasEdits){toast('No edits to save','error');return}
+    const hasTextEdits=Object.values(editTexts).some(e=>Object.keys(e).length>0);
+    const hasMetaEdits=Object.values(editMeta).some(e=>Object.keys(e).length>0);
+    if(!hasTextEdits&&!hasMetaEdits){toast('No edits to save','error');return}
     // Embed all standard fonts upfront
     const fonts={
       helvetica:await doc.embedFont(PDFLib.StandardFonts.Helvetica),
@@ -663,42 +750,57 @@ async function saveEditedPdf(){
       courierBold:await doc.embedFont(PDFLib.StandardFonts.CourierBold),
       courierOblique:await doc.embedFont(PDFLib.StandardFonts.CourierOblique),
     };
-    function pickFont(fontName){
+    function pickFont(fontName,metaBold,metaItalic){
       const fn=(fontName||'').toLowerCase();
-      const bold=/bold/i.test(fn),italic=/italic|oblique/i.test(fn);
+      const bold=metaBold||/bold/i.test(fn),italic=metaItalic||/italic|oblique/i.test(fn);
       if(fn.includes('courier'))return bold?fonts.courierBold:italic?fonts.courierOblique:fonts.courier;
       if(fn.includes('times'))return bold&&italic?fonts.timesRomanBoldItalic:bold?fonts.timesRomanBold:italic?fonts.timesRomanItalic:fonts.timesRoman;
       return bold&&italic?fonts.helveticaBoldOblique:bold?fonts.helveticaBold:italic?fonts.helveticaOblique:fonts.helvetica;
     }
-    for(const[pageNum,edits]of Object.entries(editTexts)){
-      if(!Object.keys(edits).length)continue;
+    function hexToRgb(hex){
+      const r=parseInt(hex.slice(1,3),16)/255,g=parseInt(hex.slice(3,5),16)/255,b=parseInt(hex.slice(5,7),16)/255;
+      return PDFLib.rgb(r,g,b);
+    }
+    function cssColorToRgb(c){
+      if(c&&c.startsWith('#'))return hexToRgb(c);
+      const m=c&&c.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+      if(m)return PDFLib.rgb(+m[1]/255,+m[2]/255,+m[3]/255);
+      return PDFLib.rgb(0,0,0);
+    }
+    // Collect all pages that have text edits or meta edits
+    const allPages=new Set([...Object.keys(editTexts),...Object.keys(editMeta)]);
+    for(const pageNum of allPages){
+      const edits=editTexts[pageNum]||{};
+      const metas=editMeta[pageNum]||{};
+      const allIdx=new Set([...Object.keys(edits),...Object.keys(metas)]);
+      if(!allIdx.size)continue;
       const pi=+pageNum-1;
       const pdfPage=doc.getPage(pi);
-      const{width,height}=pdfPage.getSize();
-      // Get original text items at scale=1 for PDF coordinate reference
       const srcPdf=await pdfjsLib.getDocument({data:editPdfBytes.slice()}).promise;
       const srcPage=await srcPdf.getPage(+pageNum);
       const tc=await srcPage.getTextContent();
-      for(const[idx,newText]of Object.entries(edits)){
+      for(const idx of allIdx){
         const item=tc.items[+idx];if(!item)continue;
-        if(item.str===newText)continue;// skip unchanged
-        // PDF coordinates directly from item.transform
-        const fontSize=Math.hypot(item.transform[0],item.transform[1]);
-        const x=item.transform[4];
-        const y=item.transform[5];
-        const font=pickFont(item.fontName);
-        // White out: measure original text width
+        const newText=edits[idx]!==undefined?edits[idx]:item.str;
+        const m=metas[idx]||{};
+        const textChanged=newText!==item.str;
+        const hasMeta=m.color||m.dx||m.dy||m.bold||m.italic||m.fontSize;
+        if(!textChanged&&!hasMeta)continue;
+        const origFontSize=Math.hypot(item.transform[0],item.transform[1]);
+        const fontSize=m.fontSize||origFontSize;
+        const x=item.transform[4]+(m.dx||0)/1;// dx is in screen px at fitScale, convert back
+        const y=item.transform[5]+(m.dy?-(m.dy)/1:0);// flip Y for PDF coords
+        const font=pickFont(item.fontName,m.bold,m.italic);
+        // Determine colour
+        const origColor=item.color?PDFLib.rgb(item.color[0],item.color[1],item.color[2]):PDFLib.rgb(0,0,0);
+        const drawColor=m.color?cssColorToRgb(m.color):origColor;
+        // White out original
         let origW;
-        try{origW=font.widthOfTextAtSize(item.str,fontSize)}catch(e){origW=item.str.length*fontSize*0.5}
+        try{origW=font.widthOfTextAtSize(item.str,origFontSize)}catch(e){origW=item.str.length*origFontSize*0.5}
         const pad=2;
-        pdfPage.drawRectangle({x:x-pad,y:y-pad-fontSize*0.15,width:origW+pad*3,height:fontSize*1.3,color:PDFLib.rgb(1,1,1),borderWidth:0});
-        // Draw replacement text - handle encoding errors gracefully
-        try{
-          pdfPage.drawText(newText,{x,y,size:fontSize,font,color:PDFLib.rgb(0,0,0)});
-        }catch(encErr){
-          // If font can't encode character, fall back to Helvetica
-          pdfPage.drawText(newText,{x,y,size:fontSize,font:fonts.helvetica,color:PDFLib.rgb(0,0,0)});
-        }
+        pdfPage.drawRectangle({x:item.transform[4]-pad,y:item.transform[5]-pad-origFontSize*0.15,width:origW+pad*3,height:origFontSize*1.3,color:PDFLib.rgb(1,1,1),borderWidth:0});
+        try{pdfPage.drawText(newText,{x,y,size:fontSize,font,color:drawColor})}
+        catch(e){pdfPage.drawText(newText,{x,y,size:fontSize,font:fonts.helvetica,color:drawColor})}
       }
     }
     download(await doc.save(),'edited.pdf');
